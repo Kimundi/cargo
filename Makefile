@@ -35,7 +35,8 @@ BINS = cargo \
 		 cargo-test \
 		 cargo-run \
 		 cargo-version \
-		 cargo-new
+		 cargo-new \
+		 cargo-generate-lockfile \
 
 SRC = $(shell find src -name '*.rs' -not -path 'src/bin*')
 

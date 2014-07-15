@@ -15,6 +15,10 @@ extern crate toml;
 #[phase(plugin, link)]
 extern crate hammer;
 
+#[phase(plugin)]
+extern crate regex_macros;
+extern crate regex;
+
 #[phase(plugin, link)]
 extern crate log;
 

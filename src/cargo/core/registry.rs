@@ -8,6 +8,9 @@ pub trait Registry {
 
 impl Registry for Vec<Summary> {
     fn query(&mut self, dep: &Dependency) -> CargoResult<Vec<Summary>> {
+        debug!("querying, summaries={}",
+            self.iter().map(|s| s.get_package_id().to_string()).collect::<Vec<String>>());
+
         Ok(self.iter()
             .filter(|summary| dep.matches(*summary))
             .map(|summary| summary.clone())
@@ -74,16 +77,16 @@ impl<'a> PackageRegistry<'a> {
         Ok(ret)
     }
 
-    fn ensure_loaded(&mut self, namespace: &SourceId) -> CargoResult<()> {
-        if self.searched.contains(namespace) { return Ok(()); }
-        try!(self.load(namespace, false));
+    fn ensure_loaded(&mut self, source_id: &SourceId) -> CargoResult<()> {
+        if self.searched.contains(source_id) { return Ok(()); }
+        try!(self.load(source_id, false));
         Ok(())
     }
 
-    fn load(&mut self, namespace: &SourceId, override: bool) -> CargoResult<()> {
+    fn load(&mut self, source_id: &SourceId, override: bool) -> CargoResult<()> {
 
         (|| {
-            let mut source = namespace.load(self.config);
+            let mut source = source_id.load(self.config);
             let dst = if override {&mut self.overrides} else {&mut self.summaries};
 
             // Ensure the source has fetched all necessary remote data.
@@ -100,10 +103,10 @@ impl<'a> PackageRegistry<'a> {
             self.sources.push(source);
 
             // Track that the source has been searched
-            self.searched.push(namespace.clone());
+            self.searched.push(source_id.clone());
 
             Ok(())
-        }).chain_error(|| human(format!("Unable to update {}", namespace)))
+        }).chain_error(|| human(format!("Unable to update {}", source_id)))
     }
 
     fn query_overrides(&self, dep: &Dependency) -> Vec<Summary> {
@@ -130,11 +133,69 @@ impl<'a> Registry for PackageRegistry<'a> {
         let overrides = self.query_overrides(dep);
 
         if overrides.is_empty() {
-            // Ensure the requested namespace is loaded
-            try!(self.ensure_loaded(dep.get_namespace()));
+            // Ensure the requested source_id is loaded
+            try!(self.ensure_loaded(dep.get_source_id()));
             self.summaries.query(dep)
         } else {
             Ok(overrides)
+        }
+    }
+}
+
+#[cfg(test)]
+pub mod test {
+    use core::{Summary, Registry, Dependency};
+    use util::{CargoResult};
+
+    pub struct RegistryBuilder {
+        summaries: Vec<Summary>,
+        overrides: Vec<Summary>
+    }
+
+    impl RegistryBuilder {
+        pub fn new() -> RegistryBuilder {
+            RegistryBuilder { summaries: vec!(), overrides: vec!() }
+        }
+
+        pub fn summary(mut self, summary: Summary) -> RegistryBuilder {
+            self.summaries.push(summary);
+            self
+        }
+
+        pub fn summaries(mut self, summaries: Vec<Summary>) -> RegistryBuilder {
+            self.summaries.push_all_move(summaries);
+            self
+        }
+
+        pub fn override(mut self, summary: Summary) -> RegistryBuilder {
+            self.overrides.push(summary);
+            self
+        }
+
+        pub fn overrides(mut self, summaries: Vec<Summary>) -> RegistryBuilder {
+            self.overrides.push_all_move(summaries);
+            self
+        }
+
+        fn query_overrides(&self, dep: &Dependency) -> Vec<Summary> {
+            self.overrides.iter()
+                .filter(|s| s.get_name() == dep.get_name())
+                .map(|s| s.clone())
+                .collect()
+        }
+    }
+
+    impl Registry for RegistryBuilder {
+        fn query(&mut self, dep: &Dependency) -> CargoResult<Vec<Summary>> {
+            debug!("querying; dep={}", dep);
+
+            let overrides = self.query_overrides(dep);
+
+            if overrides.is_empty() {
+                self.summaries.query(dep)
+            } else {
+                Ok(overrides)
+            }
         }
     }
 }

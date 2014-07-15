@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use serialize::{Encodable, Encoder};
 use util::graph::{Nodes,Edges};
 
 use core::{
@@ -13,12 +14,52 @@ use semver;
 use util::{CargoResult, Graph, human, internal};
 
 pub struct Resolve {
-    graph: Graph<PackageId>
+    graph: Graph<PackageId>,
+    root: PackageId
+}
+
+#[deriving(Encodable, Decodable, Show)]
+pub struct EncodableResolve {
+    package: Vec<EncodableDependency>
+}
+
+#[deriving(Encodable, Decodable, Show)]
+pub struct EncodableDependency{
+    name: String,
+    version: String,
+    source: SourceId,
+    dependencies: Option<Vec<PackageId>>
+}
+
+impl<E, S: Encoder<E>> Encodable<S, E> for Resolve {
+    fn encode(&self, s: &mut S) -> Result<(), E> {
+        let mut ids: Vec<&PackageId> = self.graph.iter().collect();
+        ids.sort();
+
+        let encodable = ids.iter().filter_map(|&id| {
+            if self.root == *id { return None; }
+
+            let deps = self.graph.edges(id).map(|edge| {
+                let mut deps = edge.map(|e| e.clone()).collect::<Vec<PackageId>>();
+                deps.sort();
+                deps
+            });
+
+            Some(EncodableDependency {
+                name: id.get_name().to_string(),
+                version: id.get_version().to_string(),
+                source: id.get_source_id().clone(),
+                dependencies: deps
+            })
+        }).collect::<Vec<EncodableDependency>>();
+
+        EncodableResolve { package: encodable }.encode(s)
+    }
 }
 
 impl Resolve {
-    fn new() -> Resolve {
-        Resolve { graph: Graph::new() }
+    fn new(root: PackageId) -> Resolve {
+        Resolve { graph: Graph::new(), root: root }
     }
 
     pub fn iter(&self) -> Nodes<PackageId> {
@@ -41,10 +82,10 @@ struct Context<'a, R> {
 }
 
 impl<'a, R: Registry> Context<'a, R> {
-    fn new(registry: &'a mut R) -> Context<'a, R> {
+    fn new(registry: &'a mut R, root: PackageId) -> Context<'a, R> {
         Context {
             registry: registry,
-            resolve: Resolve::new(),
+            resolve: Resolve::new(root),
             seen: HashMap::new()
         }
     }
@@ -54,7 +95,7 @@ pub fn resolve<R: Registry>(root: &PackageId, deps: &[Dependency], registry: &mu
                             -> CargoResult<Resolve> {
     log!(5, "resolve; deps={}", deps);
 
-    let mut context = Context::new(registry);
+    let mut context = Context::new(registry, root.clone());
     try!(resolve_deps(root, deps, &mut context));
     Ok(context.resolve)
 }
@@ -122,6 +163,7 @@ mod test {
     use core::source::{SourceId, RegistryKind, GitKind, Location, Remote};
     use core::{Dependency, PackageId, Summary, Registry};
     use util::CargoResult;
+    use core::registry::test::RegistryBuilder;
 
     fn resolve<R: Registry>(pkg: &PackageId, deps: &[Dependency], registry: &mut R)
                             -> CargoResult<Vec<PackageId>> {

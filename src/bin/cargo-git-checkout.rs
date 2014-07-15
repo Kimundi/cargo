@@ -35,7 +35,7 @@ fn execute(options: Options, shell: &mut MultiShell) -> CliResult<Option<()>> {
                                                    not a valid URL", url)))
                         .map_err(|e| CliError::from_boxed(e, 1)));
 
-    let source_id = SourceId::for_git(&url, reference.as_slice());
+    let source_id = SourceId::for_git(&url, reference.as_slice(), None);
 
     let mut config = try!(Config::new(shell, true, None, None).map_err(|e| {
         CliError::from_boxed(e, 1)
