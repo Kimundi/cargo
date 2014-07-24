@@ -88,11 +88,15 @@ pub fn compile(manifest_path: &Path,
         target.get_profile().get_env() == env
     }).collect::<Vec<&Target>>();
 
-    let mut config = try!(Config::new(*shell, update, jobs, target));
-    try!(scrape_target_config(&mut config, &user_configs));
+    {
+        let mut config = try!(Config::new(*shell, update, jobs, target));
+        try!(scrape_target_config(&mut config, &user_configs));
 
-    try!(ops::compile_targets(env.as_slice(), targets.as_slice(), &package,
-         &PackageSet::new(packages.as_slice()), &resolve, &mut config));
+        try!(ops::compile_targets(env.as_slice(), targets.as_slice(), &package,
+             &PackageSet::new(packages.as_slice()), &resolve, &mut config));
+    }
+
+    //try!(ops::generate_lockfile(manifest_path, *shell, false));
 
     let test_executables: Vec<String> = targets.iter()
         .filter_map(|target| {
