@@ -96,7 +96,7 @@ pub fn compile(manifest_path: &Path,
              &PackageSet::new(packages.as_slice()), &resolve, &mut config));
     }
 
-    //try!(ops::generate_lockfile(manifest_path, *shell, false));
+    try!(ops::generate_lockfile(manifest_path, *shell, false));
 
     let test_executables: Vec<String> = targets.iter()
         .filter_map(|target| {
